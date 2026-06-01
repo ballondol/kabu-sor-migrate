@@ -1,0 +1,127 @@
+patterns:
+  # === 1. Credential Leakage ===
+  - rule_name: kabu_api_password_hardcoded
+    substrings:
+      - "X-API-PASSWORD"
+      - "x-api-password"
+    paths:
+      - "**/*.py"
+      - "**/*.env*"
+      - "**/*.json"
+      - "**/*.yaml"
+      - "**/*.yml"
+    exclude_paths:
+      - "**/.claude/**"
+      - "**/README*"
+      - "**/docs/**"
+    reminder: >
+      'X-API-PASSWORD' が検出されました。
+      kabu STATION® API のパスワードは環境変数 KABU_API_PASSWORD から読み込み、
+      コード中には一切書かないでください。ログ出力も禁止です。
+
+  - rule_name: kabu_token_in_log
+    regex: "(logger|logging|print).*token"
+    paths:
+      - "**/*.py"
+    reminder: >
+      APIトークンをログに出力しようとしている可能性があります。
+      kabu STATION® API のトークンはログに出力しないでください。
+
+  # === 2. Order Safety ===
+  - rule_name: sendorder_without_confirm
+    substrings:
+      - "/kabusapi/sendorder"
+      - "sendorder"
+    paths:
+      - "**/*.py"
+    reminder: >
+      発注APIの呼び出しを検出しました。
+      必ず発注前に「銘柄・売買区分・数量・価格」を表示してユーザー確認を取ってください。
+      確認なしの自動発注は誤発注リスクがあります。
+
+  - rule_name: cancelorder_without_orderid
+    regex: "cancelorder(?!.*OrderID|.*order_id)"
+    paths:
+      - "**/*.py"
+    reminder: >
+      注文取消しAPIの呼び出しを検出しました。
+      必ず現在の注文一覧から OrderID を取得して、
+      特定の注文IDを指定してキャンセルしてください。
+      銘柄コードや状態だけでのキャンセルは誤操作の原因になります。
+
+  # === 3. Environment Safety ===
+  - rule_name: hardcoded_kabu_endpoint
+    substrings:
+      - "localhost:18080"
+      - "http://localhost"
+    paths:
+      - "**/*.py"
+    exclude_paths:
+      - "**/.claude/**"
+      - "**/README*"
+      - "**/test_*.py"
+      - "**/*_test.py"
+    reminder: >
+      kabu STATION® APIのエンドポイントがハードコードされています。
+      環境変数 KABU_ENDPOINT から読み込んでください。
+      本番とテストでエンドポイントが同じになるリスクがあります。
+
+  - rule_name: no_sandbox_warning
+    regex: "sendorder|cancelorder|registpush"
+    paths:
+      - "**/*.py"
+    reminder: >
+      注意: kabu STATION® API にはサンドボックス環境がありません。
+      すべてのAPI呼び出しは本番口座に影響します。
+      KABU_ENV 環境変数で本番モードを明示的に確認してから実行してください。
+
+  # === 4. Rate Limiting ===
+  - rule_name: loop_without_sleep
+    regex: "for .* in .*:\n(?!.*sleep)"
+    paths:
+      - "**/*.py"
+    reminder: >
+      ループ内でのAPI呼び出しにはsleepが必要です。
+      kabu STATION® APIのレート制限は10リクエスト/秒です。
+      各API呼び出しの後に time.sleep(0.1) を追加してください。
+
+  # === 5. Error Handling ===
+  - rule_name: bare_except
+    regex: "except:"
+    paths:
+      - "**/*.py"
+    reminder: >
+      bare except は使用しないでください。
+      ConnectionError, Timeout, HTTPError を個別にハンドルしてください。
+      kabu STATION® APIではエラー種別によって対処が異なります。
+
+  - rule_name: response_body_in_log
+    regex: "(logger|logging|print).*response\\.text|response\\.json"
+    paths:
+      - "**/*.py"
+    reminder: >
+      APIレスポンス本文をそのままログに出力しようとしています。
+      レスポンスには残高・保有株・注文情報などの機密データが含まれる場合があります。
+      ステータスコードとサニタイズしたエラーメッセージのみをログに記録してください。
+
+  # === 6. SOR Migration ===
+  - rule_name: hardcoded_commission
+    regex: "commission|手数料|fee.*=.*[0-9]"
+    paths:
+      - "**/*.py"
+    reminder: >
+      手数料がハードコードされている可能性があります。
+      eスマート証券は2026-05-18より国内株式をSOR選択時に手数料無料化しています。
+      sor=True の場合は手数料ゼロとして計算してください。
+
+  - rule_name: sor_false_default
+    substrings:
+      - "SOR=False"
+      - "sor=False"
+      - "sor=false"
+    paths:
+      - "**/*.py"
+    reminder: >
+      SOR=False がデフォルトとして使用されています。
+      eスマート証券では2026-05-18以降、SOR=True が推奨デフォルトです。
+      意図的にSORを無効化する場合はコメントで理由を明記してください。
